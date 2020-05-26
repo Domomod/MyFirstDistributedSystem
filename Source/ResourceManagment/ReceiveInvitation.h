@@ -6,12 +6,12 @@
 #include <map>
 
 #include "Communication/Comunicator.h"
-
+#include "ResourceManagment/AbstractStrategy.h"
 
 #ifndef RECIEVE_INVITATION_STRATEGY_H
 #define RECIEVE_INVITATION_STRATEGY_H
 
-class RecieveInvitationStrategy
+class RecieveInvitationStrategy : public AbstractStrategy
 {
 private:
  enum State
@@ -23,14 +23,15 @@ private:
         NUM_STATES
     } state;
     const std::string StateNames[NUM_STATES]  = {"IDLE", "COMPETING", "WAITING", "IN_TEAM"};
-    int node_id;
     int teammate_id;
+    int accepted_invitation_id;
     std::map<int, Message> invitations;
+    std::mutex invitations_mtx;
+
+
     std::mutex state_mtx;
     std::condition_variable in_team;
 private:
-    void changeState(State newState);
-
     void changeStateUnguarded(State newState);
 
     void ReplyToInvitation(Message& message);
@@ -50,15 +51,15 @@ private:
     void HandleWhileInTeam(Message& message);
 
 public:
-    RecieveInvitationStrategy(int tid);
+    RecieveInvitationStrategy(int resourceType, int nodeId);
 
-    void acquire();
+    void acquire() override;
 
-    void release();
+    void release() override;
 
-    void HandleMessage(Message& message);
+    void HandleMessage(Message& message) override;
 
-    void run();
+    void run() override;
 };
 
 #endif

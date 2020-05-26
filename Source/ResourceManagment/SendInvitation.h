@@ -5,8 +5,9 @@
 #include <iostream>
 
 #include "Communication/Comunicator.h"
+#include "ResourceManagment/AbstractStrategy.h"
 
-class SendInvitationStrategy
+class SendInvitationStrategy : public  AbstractStrategy
 {
 private:
     enum State
@@ -18,7 +19,6 @@ private:
         NUM_STATES
     } state;
     const std::string StateNames[NUM_STATES] = {"IDLE", "COMPETING", "IN_TEAM", "DISBANDED"};
-    int node_id;
     int teammate_id;
     int current_invitation_id;
     std::vector<int> invitationTargets;
@@ -42,7 +42,7 @@ private:
     void HandleWhileInTeam(Message& message);
 
 public:
-    SendInvitationStrategy(int tid, std::vector<int>& invitationTargets);
+    SendInvitationStrategy(int resourceType, int nodeId, const std::vector<int> &invitationTargets);
 
     void acquire();
 
