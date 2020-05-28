@@ -51,7 +51,7 @@ private:
     void HandleWhileInTeam(Message& message);
 
 public:
-    RecieveInvitationStrategy(int resourceType, int nodeId);
+    RecieveInvitationStrategy(int resourceType, int nodeId, Communicator *communicator);
 
     void acquire() override;
 

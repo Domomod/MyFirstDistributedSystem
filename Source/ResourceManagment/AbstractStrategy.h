@@ -9,16 +9,18 @@
 
 class AbstractStrategy {
 protected:
+    Communicator *communicator;
     int resource_type;
     int node_id;
 public:
-    AbstractStrategy(int resourceType, int nodeId) : resource_type(resourceType), node_id(nodeId) {}
+    AbstractStrategy(int resourceType, int nodeId, Communicator *communicator)
+            : resource_type(resourceType), node_id(nodeId), communicator(communicator) {}
 
     virtual void acquire() = 0;
 
     virtual void release() = 0;
 
-    virtual void HandleMessage(Message& message) = 0;
+    virtual void HandleMessage(Message &message) = 0;
 
     virtual void run() = 0;
 };

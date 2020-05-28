@@ -29,8 +29,6 @@ private:
 private:
     void SendInvitations();
 
-    void changeState(State newState);
-
     void changeStateUnguarded(State newState);
 
     bool VerifyResponse(Message& message);
@@ -42,7 +40,7 @@ private:
     void HandleWhileInTeam(Message& message);
 
 public:
-    SendInvitationStrategy(int resourceType, int nodeId, const std::vector<int> &invitationTargets);
+    SendInvitationStrategy(int resourceType, int nodeId, Communicator *communicator, const std::vector<int> &invitationTargets);
 
     void acquire();
 

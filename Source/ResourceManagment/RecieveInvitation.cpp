@@ -1,7 +1,7 @@
 #include "ReceiveInvitation.h"
 
-RecieveInvitationStrategy::RecieveInvitationStrategy(int resourceType, int nodeId) : AbstractStrategy(resourceType,
-                                                                                                      nodeId) {
+RecieveInvitationStrategy::RecieveInvitationStrategy(int resourceType, int nodeId, Communicator *communicator) : AbstractStrategy(resourceType,
+                                                                                                      nodeId, communicator) {
     state = IDLE;
 }
 
@@ -22,7 +22,7 @@ void RecieveInvitationStrategy::release() {
         std::unique_lock<std::mutex> lock(state_mtx);
         in_team.wait(lock, [=]() { return state == IN_TEAM; });
         changeStateUnguarded(IDLE);
-        Communcatior::Send(Message(Disband, node_id, teammate_id, accepted_invitation_id, resource_type));
+        communicator->Send(Message(Disband, node_id, teammate_id, accepted_invitation_id, resource_type));
     }
     in_team.notify_all();
 }
@@ -42,13 +42,13 @@ void RecieveInvitationStrategy::HandleMessage(Message &message) {
 
 void RecieveInvitationStrategy::run() {
     while (true) {
-        Message message = Communcatior::Recieve();
+        Message message = communicator->Recieve();
         HandleMessage(message);
     }
 };
 
 void RecieveInvitationStrategy::HandleWhileIdle(Message &message) {
-    if (message.type == Invite) {
+    if (message.type == Request) {
         SaveInvitation(message);
     } else if (message.type == Reject) {
         RemoveInvitation(message);
@@ -58,7 +58,7 @@ void RecieveInvitationStrategy::HandleWhileIdle(Message &message) {
 }
 
 void RecieveInvitationStrategy::HandleWhileCompeting(Message &message) {
-    if (message.type == Invite) {
+    if (message.type == Request) {
         changeStateUnguarded(WAITING);
         ReplyToInvitation(message);
     } else if (message.type == Reject) {
@@ -69,7 +69,7 @@ void RecieveInvitationStrategy::HandleWhileCompeting(Message &message) {
 }
 
 void RecieveInvitationStrategy::HandleWhileWaiting(Message &message) {
-    if (message.type == Invite) {
+    if (message.type == Request) {
         SaveInvitation(message);
     } else if (message.type == Reject) {
         RemoveInvitation(message);
@@ -86,7 +86,7 @@ void RecieveInvitationStrategy::HandleWhileWaiting(Message &message) {
 }
 
 void RecieveInvitationStrategy::HandleWhileInTeam(Message &message) {
-    if (message.type == Invite) {
+    if (message.type == Request) {
         SaveInvitation(message);
     } else if (message.type == Reject) {
         RemoveInvitation(message);
@@ -102,10 +102,10 @@ void RecieveInvitationStrategy::changeStateUnguarded(State newState) {
 }
 
 void RecieveInvitationStrategy::ReplyToInvitation(Message &message) {
-    if (message.type == Invite) {
+    if (message.type == Request) {
         teammate_id = message.sender;
-        accepted_invitation_id = message.tag;
-        Communcatior::Send(Message(Agree, node_id, teammate_id, accepted_invitation_id, resource_type));
+        accepted_invitation_id = message.signature;
+        communicator->Send(Message(Agree, node_id, teammate_id, accepted_invitation_id, resource_type));
     }
 }
 

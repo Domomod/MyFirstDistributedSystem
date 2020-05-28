@@ -1,7 +1,7 @@
 #include "SendInvitation.h"
 
-SendInvitationStrategy::SendInvitationStrategy(int resourceType, int nodeId, const std::vector<int> &invitationTargets)
-        : AbstractStrategy(resourceType, nodeId),
+SendInvitationStrategy::SendInvitationStrategy(int resourceType, int nodeId, Communicator *communicator, const std::vector<int> &invitationTargets)
+        : AbstractStrategy(resourceType, nodeId, communicator),
         teammate_id(0),
         current_invitation_id(0),
         state(IDLE),
@@ -25,7 +25,7 @@ void SendInvitationStrategy::acquire() {
 void SendInvitationStrategy::release() {
     std::cout << "[Node:" << node_id << "] release()\n";
     { // Ensure IN_TEAM state
-        Communcatior::Send(Message(Agree, node_id, teammate_id, current_invitation_id, resource_type));
+        communicator->Send(Message(Agree, node_id, teammate_id, current_invitation_id, resource_type));
         std::unique_lock<std::mutex> lock(state_mtx);
         std::cout << "[Node:" << node_id << "] wait == idle\n";
         in_team.wait(lock, [=]() { return state == DISBANDED; });
@@ -35,12 +35,14 @@ void SendInvitationStrategy::release() {
 
 void SendInvitationStrategy::run() {
     while (true) {
-        Message message = Communcatior::Recieve();
+        Message message = communicator->Recieve();
         HandleMessage(message);
     }
 }
 
 void SendInvitationStrategy::HandleMessage(Message &message) {
+    std::lock_guard<std::mutex> lock(state_mtx);
+
     if (state == IDLE)
         HandleWhileIdle(message);
     else if (state == COMPETING)
@@ -58,9 +60,9 @@ void SendInvitationStrategy::HandleWhileCompeting(Message &message) {
         teammate_id = message.sender;
         for (auto &target : invitationTargets) {
             if (target != teammate_id)
-                Communcatior::Send(Message(Reject, node_id, target, current_invitation_id, resource_type));
+                communicator->Send(Message(Reject, node_id, target, current_invitation_id, resource_type));
         }
-        changeState(IN_TEAM);
+        changeStateUnguarded(IN_TEAM);
         in_team.notify_all();
     } else {
         std::cout << "[Node "<< node_id <<"] unexpected message while competing: " << message << "\n";
@@ -69,7 +71,8 @@ void SendInvitationStrategy::HandleWhileCompeting(Message &message) {
 
 void SendInvitationStrategy::HandleWhileInTeam(Message &message) {
     if (message.type == Disband) {
-        changeState(DISBANDED);
+        changeStateUnguarded(DISBANDED);
+        in_team.notify_all();
     } else {
         std::cout << "[Node "<< node_id <<"] unexpected message while in_team: " << message << "\n";
     }
@@ -77,7 +80,7 @@ void SendInvitationStrategy::HandleWhileInTeam(Message &message) {
 
 void SendInvitationStrategy::SendInvitations() {
     Message invitation(
-            Invite,
+            Request,
             node_id,
             0,
             current_invitation_id,
@@ -85,19 +88,10 @@ void SendInvitationStrategy::SendInvitations() {
     );
     for (auto target : invitationTargets) {
         invitation.destination = target;
-        Communcatior::Send(invitation);
+        communicator->Send(invitation);
     }
 
     current_invitation_id++;
-}
-
-void SendInvitationStrategy::changeState(State newState) {
-    {
-        std::lock_guard<std::mutex> lock(state_mtx);
-        state = newState;
-        std::cout << "[Node:" << node_id << "]" << " new state " << StateNames[state] << "\n";
-    }
-    in_team.notify_all();
 }
 
 void SendInvitationStrategy::changeStateUnguarded(State newState) {
@@ -106,5 +100,5 @@ void SendInvitationStrategy::changeStateUnguarded(State newState) {
 }
 
 bool SendInvitationStrategy::VerifyResponse(Message &message) {
-    return message.type == Agree && message.tag == current_invitation_id;
+    return message.type == Agree && message.signature == current_invitation_id;
 }

@@ -20,7 +20,8 @@ void inviting(int tid, int size)
 	for(int i = 0; i < size/2; i++)
 		accepting_nodes.push_back(i);
 
-	SendInvitationStrategy strategy(0, tid, accepting_nodes);
+    Communicator communicator(tid);
+    SendInvitationStrategy strategy(0, tid, &communicator, accepting_nodes);
 	std::thread th(&SendInvitationStrategy::run, &strategy);
 
 	while(true)
@@ -33,7 +34,8 @@ void inviting(int tid, int size)
 
 void accepting(int tid, int size)
 {
-	RecieveInvitationStrategy strategy(0, tid);
+    Communicator communicator(tid);
+	RecieveInvitationStrategy strategy(0, tid, &communicator);
 	std::thread th(&RecieveInvitationStrategy::run, &strategy);
 	while(true)
 	{

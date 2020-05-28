@@ -21,6 +21,8 @@ enum ResourceTypes {
 
 class Node {
 protected:
+    Communicator communicator;
+
     int node_id;
 
     virtual void communication_thread() = 0;
@@ -28,7 +30,7 @@ protected:
     virtual void processing_thread() = 0;
 
 public:
-    explicit Node(int nodeId) : node_id(nodeId) {}
+    explicit Node(int nodeId) : node_id(nodeId), communicator(nodeId) {}
 
     void run() {
         std::thread th(&Node::communication_thread, this);
@@ -43,7 +45,7 @@ private:
 private:
     void communication_thread() override {
         while (true) {
-            Message msg = Communcatior::Recieve();
+            Message msg = communicator.Recieve();
             teamupWithTorso.HandleMessage(msg);
         }
     }
@@ -57,7 +59,7 @@ private:
     }
 
 public:
-    explicit Head(int node_id) : Node(node_id), teamupWithTorso(HeadTorsoConnection, node_id) {
+    explicit Head(int node_id) : Node(node_id), teamupWithTorso(HeadTorsoConnection, node_id, &communicator) {
 
     }
 };
@@ -69,7 +71,7 @@ private:
 private:
     void communication_thread() override {
         while (true) {
-            Message msg = Communcatior::Recieve();
+            Message msg = communicator.Recieve();
             switch (msg.resource_type) {
                 case HeadTorsoConnection:
                     sendInvitationToHead.HandleMessage(msg);
@@ -98,9 +100,9 @@ private:
 public:
     explicit Torso(int node_id, const std::vector<int> &heads) : Node(node_id),
                                                                  sendInvitationToHead(HeadTorsoConnection,
-                                                                                      node_id, heads),
+                                                                                      node_id, &communicator, heads),
                                                                  recieveInvitationFromTail(
-                                                                         TorsoTailConnection, node_id) {}
+                                                                         TorsoTailConnection, node_id, &communicator) {}
 };
 
 class Tail : public Node {
@@ -109,7 +111,7 @@ private:
 private:
     void communication_thread() override {
         while (true) {
-            Message msg = Communcatior::Recieve();
+            Message msg = communicator.Recieve();
             sendInvitationToTorso.HandleMessage(msg);
         }
     }
@@ -124,8 +126,9 @@ private:
 
 public:
     explicit Tail(int node_id, const std::vector<int> &torsos) : Node(node_id),
-                                                                sendInvitationToTorso(TorsoTailConnection,
-                                                                                      node_id, torsos) {}
+                                                                 sendInvitationToTorso(TorsoTailConnection,
+                                                                                       node_id, &communicator,
+                                                                                       torsos) {}
 };
 
 #define HEAD 0
@@ -142,16 +145,14 @@ int main(int argc, char **argv) {
 
     std::vector<int> torsos;
     std::vector<int> heads;
-    for(int i = 0; i < size; i ++)
-    {
+    for (int i = 0; i < size; i++) {
         if (i % 3 == HEAD)
             heads.push_back(i);
         if (i % 3 == TORSO)
             torsos.push_back(i);
     }
 
-    switch(tid % 3)
-    {
+    switch (tid % 3) {
         case HEAD:
             Head(tid).run();
             break;

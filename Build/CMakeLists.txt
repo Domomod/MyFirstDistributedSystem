@@ -7,3 +7,6 @@ target_link_libraries(main PRIVATE DistributedSystemAPI)
 
 add_executable(invite_only invite_only.cpp)
 target_link_libraries(invite_only PRIVATE DistributedSystemAPI)
+
+add_executable(renewable_only renewable_only.cpp)
+target_link_libraries(renewable_only PRIVATE DistributedSystemAPI)

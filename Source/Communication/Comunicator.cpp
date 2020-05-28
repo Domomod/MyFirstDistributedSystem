@@ -1,24 +1,58 @@
 #include <mpi.h>
+#include <mutex>
 #include "Comunicator.h"
 
 std::ostream& operator<<(std::ostream& os, const Message& msg)
 {
-    os << "[from:" << msg.sender <<"] " << TypeNames[msg.type] << "." << msg.tag << " [to:" << msg.destination << "]";
+    os << "[from:" << msg.sender << "] " << TypeNames[msg.type] << "." << msg.signature << "." << msg.lamport_clock << " [to:" << msg.destination << "]";
     return os;
 }
 
 
-void Communcatior::Send(const Message& message)
+void Communicator::Send(Message message)
 {
-    MPI_Send(&message, 5, MPI_INT, message.destination, MSG_TAG, MPI_COMM_WORLD);
+    std::lock_guard<std::mutex> lock(clock_mtx);
+    message.lamport_clock = lamportClock;
+    lamportClock = lamportClock + 1;
+
+    _Message smaller_msg(message);
+    MPI_Send(&smaller_msg, 4, MPI_INT, message.destination, MSG_TAG, MPI_COMM_WORLD);
     std::cout << "[Node " << message.sender << "] sending: "<< message << "\n";
 }
 
-Message Communcatior::Recieve()
+Message Communicator::Recieve()
 {
-    Message message;
-    MPI_Recv(&message, 5, MPI_INT, MPI_ANY_SOURCE, MSG_TAG, MPI_COMM_WORLD, nullptr);
-    std::cout << "[Node " << message.destination << "] recieved: "<< message << "\n";
+    _Message _message{};
+    MPI_Status status{};
+    MPI_Recv(&_message, 4, MPI_INT, MPI_ANY_SOURCE, MSG_TAG, MPI_COMM_WORLD, &status);
 
+    std::lock_guard<std::mutex> lock(clock_mtx);
+    lamportClock = std::max(_message.lamport_clock, lamportClock) + 1;
+
+    Message message(_message, status.MPI_SOURCE, node_id);
+    std::cout << "[Node " << node_id << "] recieved: "<< message << "\n";
     return message;
+}
+
+int Communicator::getLamportClock() {
+    std::lock_guard<std::mutex> lock(clock_mtx);
+    return lamportClock;
+}
+
+Communicator::Communicator(int nodeId) : node_id(nodeId), lamportClock(0) {}
+
+Communicator::_Message::_Message(int type, int signature, int lamportClock, int resourceType) : type(type),
+                                                                                                signature(signature),
+                                                                                                lamport_clock(
+                                                                                                        lamportClock),
+                                                                                                resource_type(
+                                                                                                        resourceType) {}
+
+Communicator::_Message::_Message(Message &message) : type(message.type),
+                                                     signature(message.signature),
+                                                     lamport_clock(
+                                                             message.lamport_clock),
+                                                     resource_type(
+                                                             message.resource_type) {
+
 }
