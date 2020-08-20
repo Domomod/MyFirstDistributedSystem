@@ -8,18 +8,23 @@
 #include <utility>
 
 RenewableResourceStrategy::RenewableResourceStrategy(int resourceType, int nodeId, Communicator *communicator,
-                                                     int resourceCount,
-                                                     std::vector<int> otherNodes)
-        : AbstractStrategy(resourceType, nodeId, communicator), resource_count(resourceCount),
-          other_nodes(std::move(otherNodes)), state(IDLE), permits(0), request_number(0), request_priority(0) {
+                                                     int resourceCount, std::vector<int> nodes,
+                                                     std::string resourceName, std::string nodeName)
+        : AbstractStrategy(resourceType, nodeId, communicator, resourceName, nodeName), resource_count(resourceCount),
+        state(IDLE), permits(0), request_number(0), request_priority(0) {
+
+    for(int node : nodes)
+    {
+        if(node != nodeId)
+            other_nodes.push_back(node);
+    }
 }
 
 void RenewableResourceStrategy::acquire() {
+    WriteLog("Tries to acquire the resource");
     std::unique_lock<std::mutex> lock(state_mtx);
-    state = COMPETING;
+    changeState(COMPETING);
     permits = 0;
-    std::cout << "[Node " << node_id << "] changed state to COMPETING \n";
-
     request_priority = communicator->getLamportClock();
     request_number++;
     Message msg(Request, node_id, 0, request_number, resource_type, request_priority);
@@ -28,20 +33,21 @@ void RenewableResourceStrategy::acquire() {
         communicator->Send(msg);
     }
     state_cv.wait(lock, [=]() { return state == ACQUIRED; });
+    WriteLog("Acquired the resource");
 }
 
 void RenewableResourceStrategy::release() {
+    WriteLog("Tries to release the resouce");
     std::lock_guard<std::mutex> lock(state_mtx);
-    state = IDLE;
-    std::cout << "[Node " << node_id << "] changed state to IDLE \n";
+    changeState(IDLE);
     for (auto &request : requests) {
         SendAgreement(request);
     }
     requests.clear();
-    std::cout << "[Node " << node_id << "] release() - step out\n";
+    WriteLog("Released the resource");
 }
 
-void RenewableResourceStrategy::run() {
+[[noreturn]] void RenewableResourceStrategy::run() {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
     while (true) {
@@ -73,17 +79,15 @@ void RenewableResourceStrategy::HandleWhileCompeting(Message &message) {
     if (message.type == Request) {
         if (message.lamport_clock > request_priority ||
             (message.lamport_clock == request_priority && message.sender > node_id)) {
-            SendAgreement(message);
+            SaveMessageForLater(message);
         } else {
-            std::cout << "[Node " << node_id << "] keeps request: " << message << "\n";
-            requests.push_back(message);
+
+            SendAgreement(message);
         }
     } else if (message.type == Agree && message.signature == request_number) {
         permits++;
-        std::cout << "[Node " << node_id << "] Agreement has matching request number\n";
         if (permits + resource_count > other_nodes.size()) {
-            state = ACQUIRED;
-            std::cout << "[Node " << node_id << "] changed state to ACQUIRED\n";
+            changeState(ACQUIRED);
             state_cv.notify_all();
         }
     }
@@ -91,8 +95,8 @@ void RenewableResourceStrategy::HandleWhileCompeting(Message &message) {
 
 void RenewableResourceStrategy::HandleWhileAcquired(Message &message) {
     if (message.type == Request) {
-        std::cout << "[Node " << node_id << "] keeps request: " << message << "\n";
-        requests.push_back(message);
+        SaveMessageForLater(message);
+
     }
 }
 
@@ -101,3 +105,16 @@ void RenewableResourceStrategy::SendAgreement(Message &message) {
             Message(Agree, node_id, message.sender, message.signature, resource_type));
 }
 
+void RenewableResourceStrategy::changeState(State newState) {
+    WriteLog("Changes state to " + StateNames[newState]);
+    state = newState;
+}
+
+void RenewableResourceStrategy::SaveMessageForLater(Message &message) {
+    WriteLog("Saves request " + message.to_str());
+    requests.push_back(message);
+}
+
+std::string RenewableResourceStrategy::getStateName() {
+    return StateNames[state];
+}

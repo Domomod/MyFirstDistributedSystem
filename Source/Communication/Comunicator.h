@@ -1,6 +1,7 @@
 #include <iostream>
 #include <mutex>
 #include <mpi.h>
+#include <sstream>
 
 #ifndef COMUNICATOR_H
 #define COMUNICATOR_H
@@ -11,9 +12,10 @@ enum Type {
     Request,
     Agree,
     Reject,
-    Disband
+    Disband,
+    Increment
 };
-const std::string TypeNames[] = {"Invite", "Agree", "Reject", "Disband"};
+const std::string TypeNames[] = {"Request", "Agree", "Reject", "Disband", "Increment"};
 
 struct Message;
 
@@ -25,6 +27,7 @@ private:
     int node_id;
     int lamportClock;
     std::mutex clock_mtx;
+    std::string nodeType;
 private:
     struct _Message {
         _Message() = default;
@@ -39,7 +42,7 @@ private:
     };
 
 public:
-    Communicator(int nodeId);
+    Communicator(int nodeId, std::string nodeType = "Node");
 
     void Send(Message message);
 
@@ -65,6 +68,12 @@ struct Message {
     Message(Communicator::_Message &message, int sender, int destination)
             : type(message.type), sender(sender), destination(destination), signature(message.signature), resource_type(message.resource_type),
               lamport_clock(message.lamport_clock) {}
+
+    std::string to_str(){
+        std::stringstream ss;
+        ss << "[from:" << sender << "] " << TypeNames[type] << "." << signature << "." << lamport_clock << " [to:" << destination << "]";
+        return ss.str();
+    }
 };
 
 std::ostream &operator<<(std::ostream &os, const Message &msg);

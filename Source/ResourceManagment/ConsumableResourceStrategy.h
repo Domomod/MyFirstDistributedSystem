@@ -2,8 +2,8 @@
 // Created by dominik on 27.05.2020.
 //
 
-#ifndef MYFIRSTDISTRIBUTEDSYSTEM_RENEWABLERESOURCESTRATEGY_H
-#define MYFIRSTDISTRIBUTEDSYSTEM_RENEWABLERESOURCESTRATEGY_H
+#ifndef MYFIRSTDISTRIBUTEDSYSTEM_CONSUMABLERESOURCESTRATEGY_H
+#define MYFIRSTDISTRIBUTEDSYSTEM_CONSUMABLERESOURCESTRATEGY_H
 
 #include <vector>
 #include <list>
@@ -13,7 +13,7 @@
 #include "Communication/LamportClock.h"
 #include "AbstractStrategy.h"
 
-class RenewableResourceStrategy : public AbstractStrategy{
+class ConsumableResourceStrategy : public AbstractStrategy{
 private:
     enum State{
         IDLE,
@@ -21,21 +21,22 @@ private:
         ACQUIRED,
         STATE_COUNT
     } state;
-    std::string StateNames[STATE_COUNT] = {"IDLE","COMPETING","ACQUIRED"};
+
+    std::string StateNames[STATE_COUNT] = {"IDLE","COMPETING", "ACQUIRED"};
+
     std::mutex state_mtx;
     std::condition_variable state_cv;
-    const int resource_count;
     std::vector<int> other_nodes;
     std::vector<Message> requests;
+    std::string nodeType;
     int permits;
+    int resource_count;
     int request_priority;
-    int request_number;
 private:
 protected:
     std::string getStateName() override;
 
 private:
-
     void changeState(State newState);
 
     void HandleWhileIdle(Message &message);
@@ -46,9 +47,9 @@ private:
 
     void SendAgreement(Message &message);
 public:
-    RenewableResourceStrategy(int resourceType, int nodeId, Communicator *communicator,
-                              int resourceCount, std::vector<int> nodes,
-                              std::string resourceName, std::string nodeName);
+    ConsumableResourceStrategy(int resourceType, int nodeId, Communicator *communicator,
+                               int resourceCount, std::vector<int> nodes,
+                               std::string nodeType, std::string resourceName);
 
     void acquire() override;
 
@@ -56,10 +57,14 @@ public:
 
     void HandleMessage(Message &message) override;
 
-    [[noreturn]] void run() override;
+    void run() override;
+
+    [[noreturn]] void produceResourceThread();
 
     void SaveMessageForLater(Message &message);
+
+    void CheckIfAcquired();
 };
 
 
-#endif //MYFIRSTDISTRIBUTEDSYSTEM_RENEWABLERESOURCESTRATEGY_H
+#endif //MYFIRSTDISTRIBUTEDSYSTEM_CONSUMABLERESOURCESTRATEGY_H

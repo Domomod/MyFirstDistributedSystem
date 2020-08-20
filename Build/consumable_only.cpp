@@ -13,8 +13,7 @@
 #include <unistd.h>
 
 #include "ResourceManagment/SendInvitation.h"
-#include "ResourceManagment/RenewableResourceStrategy.h"
-
+#include "ResourceManagment/ConsumableResourceStrategy.h"
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
 
@@ -28,8 +27,12 @@ void node(int tid, int size)
     }
 
     Communicator communicator(tid);
-    RenewableResourceStrategy strategy(0, tid, &communicator, 3, nodes, std::__cxx11::string(), std::__cxx11::string());
-    std::thread th(&RenewableResourceStrategy::run, &strategy);
+    ConsumableResourceStrategy strategy(0, tid, &communicator, 3, nodes, Node, std::__cxx11::string());
+    std::thread th(&ConsumableResourceStrategy::run, &strategy);
+    std::thread th2;
+    if(tid == 0)
+        th2 = std::thread(&ConsumableResourceStrategy::produceResourceThread, &strategy);
+
     while(true)
     {
         strategy.acquire();

@@ -32,7 +32,12 @@ private:
     std::mutex state_mtx;
     std::condition_variable in_team;
 private:
-    void changeStateUnguarded(State newState);
+protected:
+    std::string getStateName() override;
+
+private:
+
+    void changeState(State newState);
 
     void ReplyToInvitation(Message& message);
 
@@ -51,7 +56,8 @@ private:
     void HandleWhileInTeam(Message& message);
 
 public:
-    RecieveInvitationStrategy(int resourceType, int nodeId, Communicator *communicator);
+    RecieveInvitationStrategy(int resourceType, int nodeId, Communicator *communicator,
+                              std::string resourceName, std::string nodeName);
 
     void acquire() override;
 
@@ -60,6 +66,8 @@ public:
     void HandleMessage(Message& message) override;
 
     void run() override;
+
+    void UnexpectedMessage(Message &message);
 };
 
 #endif

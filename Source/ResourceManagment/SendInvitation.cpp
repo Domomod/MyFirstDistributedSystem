@@ -1,7 +1,9 @@
 #include "SendInvitation.h"
 
-SendInvitationStrategy::SendInvitationStrategy(int resourceType, int nodeId, Communicator *communicator, const std::vector<int> &invitationTargets)
-        : AbstractStrategy(resourceType, nodeId, communicator),
+SendInvitationStrategy::SendInvitationStrategy(int resourceType, int nodeId, Communicator *communicator,
+                                               const std::vector<int> &invitationTargets, std::string nodeName,
+                                               std::string resourceName)
+        : AbstractStrategy(resourceType, nodeId, communicator, resourceName, nodeName),
         teammate_id(0),
         current_invitation_id(0),
         state(IDLE),
@@ -9,31 +11,32 @@ SendInvitationStrategy::SendInvitationStrategy(int resourceType, int nodeId, Com
 }
 
 void SendInvitationStrategy::acquire() {
-    std::cout << "[Node:" << node_id << "] acquire()\n";
+    WriteLog("Tries to acquire the resource");
     { // Ensure IDLE state
         std::unique_lock<std::mutex> lock(state_mtx);
-        std::cout << "[Node:" << node_id << "] wait == idle\n";
+        WriteLog("Awaits IDLE state");
         in_team.wait(lock, [=]() { return state == IDLE; });
         changeStateUnguarded(COMPETING);
         SendInvitations();
-        std::cout << "[Node:" << node_id << "] wait == in_team\n";
+        WriteLog("Awaits IN_TEAM state");
         in_team.wait(lock, [=]() { return state == IN_TEAM; });
     }
-    std::cout << "[Node:" << node_id << "] leaving acquire()\n";
+    WriteLog("Acquired the resource");
 }
 
 void SendInvitationStrategy::release() {
-    std::cout << "[Node:" << node_id << "] release()\n";
+    WriteLog("Tries to release the resource");
     { // Ensure IN_TEAM state
         communicator->Send(Message(Agree, node_id, teammate_id, current_invitation_id, resource_type));
         std::unique_lock<std::mutex> lock(state_mtx);
-        std::cout << "[Node:" << node_id << "] wait == idle\n";
+        WriteLog("Awaits IDLE state");
         in_team.wait(lock, [=]() { return state == DISBANDED; });
         changeStateUnguarded(IDLE);
     }
+    WriteLog("Released the resource");
 }
 
-void SendInvitationStrategy::run() {
+[[noreturn]] void SendInvitationStrategy::run() {
     while (true) {
         Message message = communicator->Recieve();
         HandleMessage(message);
@@ -52,7 +55,11 @@ void SendInvitationStrategy::HandleMessage(Message &message) {
 }
 
 void SendInvitationStrategy::HandleWhileIdle(Message &message) {
-    std::cout << "[Node "<< node_id <<"] unexpected message while idle: " << message << "\n";
+    UnexpectedMessage(message);
+}
+
+void SendInvitationStrategy::UnexpectedMessage(Message &message){
+    WriteLog("Recieved unexpected message " + message.to_str());
 }
 
 void SendInvitationStrategy::HandleWhileCompeting(Message &message) {
@@ -65,7 +72,7 @@ void SendInvitationStrategy::HandleWhileCompeting(Message &message) {
         changeStateUnguarded(IN_TEAM);
         in_team.notify_all();
     } else {
-        std::cout << "[Node "<< node_id <<"] unexpected message while competing: " << message << "\n";
+        UnexpectedMessage(message);
     }
 }
 
@@ -74,7 +81,7 @@ void SendInvitationStrategy::HandleWhileInTeam(Message &message) {
         changeStateUnguarded(DISBANDED);
         in_team.notify_all();
     } else {
-        std::cout << "[Node "<< node_id <<"] unexpected message while in_team: " << message << "\n";
+        UnexpectedMessage(message);
     }
 }
 
@@ -95,10 +102,14 @@ void SendInvitationStrategy::SendInvitations() {
 }
 
 void SendInvitationStrategy::changeStateUnguarded(State newState) {
+    WriteLog("Changes state to " + StateNames[newState]);
     state = newState;
-    std::cout << "[Node:" << node_id << "]" << " new state " << StateNames[state] << "\n";
 }
 
 bool SendInvitationStrategy::VerifyResponse(Message &message) {
     return message.type == Agree && message.signature == current_invitation_id;
+}
+
+std::string SendInvitationStrategy::getStateName() {
+    return StateNames[state];
 }

@@ -21,7 +21,8 @@ void inviting(int tid, int size)
 		accepting_nodes.push_back(i);
 
     Communicator communicator(tid);
-    SendInvitationStrategy strategy(0, tid, &communicator, accepting_nodes);
+    SendInvitationStrategy strategy(0, tid, &communicator, accepting_nodes, std::__cxx11::string(),
+                                    std::__cxx11::string());
 	std::thread th(&SendInvitationStrategy::run, &strategy);
 
 	while(true)
@@ -35,7 +36,7 @@ void inviting(int tid, int size)
 void accepting(int tid, int size)
 {
     Communicator communicator(tid);
-	RecieveInvitationStrategy strategy(0, tid, &communicator);
+	RecieveInvitationStrategy strategy(0, tid, &communicator, std::__cxx11::string(), std::__cxx11::string());
 	std::thread th(&RecieveInvitationStrategy::run, &strategy);
 	while(true)
 	{

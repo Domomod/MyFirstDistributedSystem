@@ -1,30 +1,35 @@
 #include "ReceiveInvitation.h"
 
-RecieveInvitationStrategy::RecieveInvitationStrategy(int resourceType, int nodeId, Communicator *communicator) : AbstractStrategy(resourceType,
-                                                                                                      nodeId, communicator) {
+RecieveInvitationStrategy::RecieveInvitationStrategy(int resourceType, int nodeId, Communicator *communicator,
+                                                     std::string resourceName, std::string nodeName) : AbstractStrategy(resourceType,
+                                                                                                      nodeId, communicator, resourceName, nodeName) {
     state = IDLE;
 }
 
 
 void RecieveInvitationStrategy::acquire() {
+    WriteLog("Tries to acquire the resource");
     std::unique_lock<std::mutex> lock(state_mtx);
     in_team.wait(lock, [=]() { return state == IDLE; });
     if (ReplyFromList())
-        changeStateUnguarded(WAITING);
+        changeState(WAITING);
     else
-        changeStateUnguarded(COMPETING);
+        changeState(COMPETING);
     in_team.wait(lock, [=]() { return state == IN_TEAM; });
+    WriteLog("Acquired the resource");
 }
 
 
 void RecieveInvitationStrategy::release() {
     {
+        WriteLog("Is ordered to release the resource");
         std::unique_lock<std::mutex> lock(state_mtx);
         in_team.wait(lock, [=]() { return state == IN_TEAM; });
-        changeStateUnguarded(IDLE);
+        changeState(IDLE);
         communicator->Send(Message(Disband, node_id, teammate_id, accepted_invitation_id, resource_type));
     }
     in_team.notify_all();
+    WriteLog("Released the resource");
 }
 
 void RecieveInvitationStrategy::HandleMessage(Message &message) {
@@ -53,18 +58,18 @@ void RecieveInvitationStrategy::HandleWhileIdle(Message &message) {
     } else if (message.type == Reject) {
         RemoveInvitation(message);
     } else {
-        std::cout << "[Node " << node_id << "] unexpected message while idle: " << message << "\n";
+        UnexpectedMessage(message);
     }
 }
 
 void RecieveInvitationStrategy::HandleWhileCompeting(Message &message) {
     if (message.type == Request) {
-        changeStateUnguarded(WAITING);
+        changeState(WAITING);
         ReplyToInvitation(message);
     } else if (message.type == Reject) {
         RemoveInvitation(message);
     } else {
-        std::cout << "[Node " << node_id << "] unexpected message while competing: " << message << "\n";
+        UnexpectedMessage(message);
     }
 }
 
@@ -75,13 +80,13 @@ void RecieveInvitationStrategy::HandleWhileWaiting(Message &message) {
         RemoveInvitation(message);
         if (teammate_id == message.sender) {
             if (!ReplyFromList())
-                changeStateUnguarded(COMPETING);
+                changeState(COMPETING);
         }
     } else if (message.type == Agree) {
-        changeStateUnguarded(IN_TEAM);
+        changeState(IN_TEAM);
         in_team.notify_all();
     } else {
-        std::cout << "[Node " << node_id << "] unexpected message while waiting: " << message << "\n";
+        UnexpectedMessage(message);
     }
 }
 
@@ -91,14 +96,15 @@ void RecieveInvitationStrategy::HandleWhileInTeam(Message &message) {
     } else if (message.type == Reject) {
         RemoveInvitation(message);
     } else {
-        std::cout << "[Node " << node_id << "] unexpected message while in team: " << message << "\n";
+        UnexpectedMessage(message);
     }
 }
 
-void RecieveInvitationStrategy::changeStateUnguarded(State newState) {
-    state = newState;
-    std::cout << "[Node:" << node_id << "]" << " new state " << StateNames[state] << "\n";
+void RecieveInvitationStrategy::UnexpectedMessage(Message &message) { WriteLog("Recieved unexpected msg: " + message.to_str()); }
 
+void RecieveInvitationStrategy::changeState(State newState) {
+    WriteLog("Changes state to " + StateNames[newState]);
+    state = newState;
 }
 
 void RecieveInvitationStrategy::ReplyToInvitation(Message &message) {
@@ -127,4 +133,8 @@ void RecieveInvitationStrategy::SaveInvitation(Message &message) {
 
 void RecieveInvitationStrategy::RemoveInvitation(Message &message) {
     invitations.erase(message.sender);
+}
+
+std::string RecieveInvitationStrategy::getStateName() {
+    return StateNames[state];
 }

@@ -4,7 +4,7 @@
 
 std::ostream& operator<<(std::ostream& os, const Message& msg)
 {
-    os << "[from:" << msg.sender << "] " << TypeNames[msg.type] << "." << msg.signature << "." << msg.lamport_clock << " [to:" << msg.destination << "]";
+    os << "[from:" << msg.sender << "] " << TypeNames[msg.type] << "." << msg.resource_type << "." << msg.signature << "." << msg.lamport_clock << " [to:" << msg.destination << "]";
     return os;
 }
 
@@ -17,7 +17,7 @@ void Communicator::Send(Message message)
 
     _Message smaller_msg(message);
     MPI_Send(&smaller_msg, 4, MPI_INT, message.destination, MSG_TAG, MPI_COMM_WORLD);
-    std::cout << "[Node " << message.sender << "] sending: "<< message << "\n";
+    std::cout << "["<< nodeType <<" " << message.sender << "] sending: "<< message << "\n";
 }
 
 Message Communicator::Recieve()
@@ -30,7 +30,7 @@ Message Communicator::Recieve()
     lamportClock = std::max(_message.lamport_clock, lamportClock) + 1;
 
     Message message(_message, status.MPI_SOURCE, node_id);
-    std::cout << "[Node " << node_id << "] recieved: "<< message << "\n";
+    std::cout << "["<< nodeType <<" " << node_id << "] recieved: "<< message << "\n";
     return message;
 }
 
@@ -39,7 +39,7 @@ int Communicator::getLamportClock() {
     return lamportClock;
 }
 
-Communicator::Communicator(int nodeId) : node_id(nodeId), lamportClock(0) {}
+Communicator::Communicator(int nodeId, std::string nodeType) : node_id(nodeId), lamportClock(0), nodeType(nodeType) {}
 
 Communicator::_Message::_Message(int type, int signature, int lamportClock, int resourceType) : type(type),
                                                                                                 signature(signature),

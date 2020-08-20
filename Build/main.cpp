@@ -10,66 +10,94 @@
 
 #include "ResourceManagment/SendInvitation.h"
 #include "ResourceManagment/ReceiveInvitation.h"
+#include "ResourceManagment/RenewableResourceStrategy.h"
+#include "ResourceManagment/ConsumableResourceStrategy.h"
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#define InitialTasksCount 10
+#define DragonCarcassCount 2
+#define WorkbenchCount 1
+
+#define HEAD 0
+#define TORSO 1
+#define TAIL 2
+
 enum ResourceTypes {
     HeadTorsoConnection,
     TorsoTailConnection,
-    ResourceTypesNumber
+    Task,
+    Workbench,
+    DragonCarcass
 };
 
-class Node {
-protected:
-    Communicator communicator;
-
+class Head {
+private:
     int node_id;
+    Communicator communicator;
+    RecieveInvitationStrategy recieveTorsoInvitation;
+    RenewableResourceStrategy workbenches;
+private:
+    [[noreturn]] void communication_thread() {
+        while (true) {
+            Message msg = communicator.Recieve();
+            recieveTorsoInvitation.HandleMessage(msg);
+            switch (msg.resource_type) {
+                case HeadTorsoConnection:
+                    recieveTorsoInvitation.HandleMessage(msg);
+                    break;
+                case Workbench:
+                    workbenches.HandleMessage(msg);
+                    break;
+            }
+        }
+    }
 
-    virtual void communication_thread() = 0;
+    [[noreturn]] void processing_thread() {
+        while (true) {
+            recieveTorsoInvitation.acquire();
+            std::cout << "Head " << node_id << " accepted team invite.\n";
+            //workbenches.acquire();
 
-    virtual void processing_thread() = 0;
+            recieveTorsoInvitation.release();
+            //workbenches.release();
+
+        }
+    }
+
 
 public:
-    explicit Node(int nodeId) : node_id(nodeId), communicator(nodeId) {}
-
     void run() {
-        std::thread th(&Node::communication_thread, this);
+        std::thread th(&Head::communication_thread, this);
         processing_thread();
         th.join();
     }
-};
 
-class Head : public Node {
-private:
-    RecieveInvitationStrategy teamupWithTorso;
-private:
-    void communication_thread() override {
-        while (true) {
-            Message msg = communicator.Recieve();
-            teamupWithTorso.HandleMessage(msg);
-        }
-    }
-
-    void processing_thread() override {
-        while (true) {
-            teamupWithTorso.acquire();
-            std::cout << " Node " << node_id << " accepted team invite.\n";
-            teamupWithTorso.release();
-        }
-    }
-
-public:
-    explicit Head(int node_id) : Node(node_id), teamupWithTorso(HeadTorsoConnection, node_id, &communicator) {
-
+    explicit Head(int node_id, std::vector<int> heads, int workbench_count)
+            : node_id(node_id),
+              communicator(node_id, "Head "),
+              recieveTorsoInvitation(HeadTorsoConnection,
+                                     node_id,
+                                     &communicator,
+                                     "HeadTorsoLink(" + std::to_string(HeadTorsoConnection) + ")",
+                                     "Head"),
+              workbenches(Workbench,
+                          node_id,
+                          &communicator,
+                          workbench_count,
+                          heads,
+                          "Workbench("+ std::to_string(Workbench) + ")",
+                          "Head") {
     }
 };
 
-class Torso : public Node {
+class Torso {
 private:
+    int node_id;
+    Communicator communicator;
     SendInvitationStrategy sendInvitationToHead;
     RecieveInvitationStrategy recieveInvitationFromTail;
+    RenewableResourceStrategy tasks;
 private:
-    void communication_thread() override {
+    [[noreturn]] void communication_thread() {
         while (true) {
             Message msg = communicator.Recieve();
             switch (msg.resource_type) {
@@ -83,57 +111,111 @@ private:
         }
     }
 
-    void processing_thread() override {
+    [[noreturn]] void processing_thread() {
         while (true) {
             sendInvitationToHead.acquire();
-            std::cout << " Torso " << node_id << " teamed with a Head.\n";
-
+            std::cout << "Torso " << node_id << " teamed with a Head.\n";
             recieveInvitationFromTail.acquire();
-            std::cout << " Torso " << node_id << " teamed with a Tail.\n";
+            std::cout << "Torso " << node_id << " teamed with a Tail.\n";
 
+            //tasks.acquire();
+
+            recieveInvitationFromTail.release();
+
+            //tasks.release();
 
             sendInvitationToHead.release();
-            recieveInvitationFromTail.release();
         }
     }
 
 public:
-    explicit Torso(int node_id, const std::vector<int> &heads) : Node(node_id),
-                                                                 sendInvitationToHead(HeadTorsoConnection,
-                                                                                      node_id, &communicator, heads),
-                                                                 recieveInvitationFromTail(
-                                                                         TorsoTailConnection, node_id, &communicator) {}
+    void run() {
+        std::thread th(&Torso::communication_thread, this);
+        std::thread th2;
+        //if(node_id == TORSO){ /*One torso recieves an additional job of broadcasting new tasks*/
+        //    th2 = std::thread(&ConsumableResourceStrategy::produceResourceThread, &tasks);
+        //}
+        processing_thread();
+        th.join();
+        th2.join();
+    }
+
+    explicit Torso(int node_id, const std::vector<int> &heads, const std::vector<int> torsoes, int taskCount)
+            : node_id(node_id),
+              communicator(node_id, "Torso"),
+              sendInvitationToHead(
+                      HeadTorsoConnection,
+                      node_id,
+                      &communicator,
+                      heads, "Torso", "HeadTorsoLink("+ std::to_string(HeadTorsoConnection) + ")"),
+              recieveInvitationFromTail(
+                      TorsoTailConnection,
+                      node_id,
+                      &communicator, "TailTorsoLink(" + std::to_string(TorsoTailConnection) + ")", "Torso"),
+              tasks(Task,
+                    node_id,
+                    &communicator,
+                    taskCount,
+                    torsoes, "Task(" + std::to_string(Task) + ")", "Torso") {}
 };
 
-class Tail : public Node {
+class Tail {
 private:
+    int node_id;
+    Communicator communicator;
     SendInvitationStrategy sendInvitationToTorso;
+    RenewableResourceStrategy dragonCarcass;
 private:
-    void communication_thread() override {
+    [[noreturn]] void communication_thread() {
         while (true) {
             Message msg = communicator.Recieve();
-            sendInvitationToTorso.HandleMessage(msg);
+            switch (msg.resource_type) {
+                case TorsoTailConnection:
+                    sendInvitationToTorso.HandleMessage(msg);
+                    break;
+                case DragonCarcass:
+                    dragonCarcass.HandleMessage(msg);
+                    break;
+            }
+
         }
     }
 
-    void processing_thread() override {
+    [[noreturn]] void processing_thread() {
         while (true) {
             sendInvitationToTorso.acquire();
-            std::cout << " Tail " << node_id << " found a Torso.\n";
+            std::cout << "Tail " << node_id << " found a Torso.\n";
+            dragonCarcass.acquire();
+
+            //Wskrzeszanie
+
+            dragonCarcass.release();
+
             sendInvitationToTorso.release();
         }
     }
 
 public:
-    explicit Tail(int node_id, const std::vector<int> &torsos) : Node(node_id),
-                                                                 sendInvitationToTorso(TorsoTailConnection,
-                                                                                       node_id, &communicator,
-                                                                                       torsos) {}
+    void run() {
+        std::thread th(&Tail::communication_thread, this);
+        processing_thread();
+        th.join();
+    }
+
+    explicit Tail(int node_id, const std::vector<int> &torsos, std::vector<int> tails, int resourceCount)
+            : node_id(node_id),
+              communicator(node_id, "Tail "),
+              sendInvitationToTorso(TorsoTailConnection,
+                                    node_id, &communicator,
+                                    torsos, "Tail", "TailTorsoLink("+ std::to_string(TorsoTailConnection) + ")"),
+              dragonCarcass(DragonCarcass,
+                            node_id,
+                            &communicator,
+                            resourceCount,
+                            tails, "DragonCarcass("+ std::to_string(DragonCarcass) + ")", "Tail") {}
 };
 
-#define HEAD 0
-#define TORSO 1
-#define TAIL 2
+
 
 int main(int argc, char **argv) {
     MPI_Init(&argc, &argv);
@@ -143,6 +225,7 @@ int main(int argc, char **argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     std::cout << "Hello cruel world " << tid << "\n";
 
+    std::vector<int> tails;
     std::vector<int> torsos;
     std::vector<int> heads;
     for (int i = 0; i < size; i++) {
@@ -150,21 +233,22 @@ int main(int argc, char **argv) {
             heads.push_back(i);
         if (i % 3 == TORSO)
             torsos.push_back(i);
+        if (i % 3 == TAIL)
+            tails.push_back(i);
     }
 
     switch (tid % 3) {
         case HEAD:
-            Head(tid).run();
+            Head(tid, heads, WorkbenchCount).run();
             break;
         case TORSO:
-            Torso(tid, heads).run();
+            Torso(tid, heads, torsos, InitialTasksCount).run();
             break;
         case TAIL:
-            Tail(tid, torsos).run();
+            Tail(tid, torsos, tails, DragonCarcassCount).run();
             break;
     }
 
     MPI_Finalize();
 }
 
-#pragma clang diagnostic pop
