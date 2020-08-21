@@ -39,7 +39,6 @@ private:
     [[noreturn]] void communication_thread() {
         while (true) {
             Message msg = communicator.Recieve();
-            recieveTorsoInvitation.HandleMessage(msg);
             switch (msg.resource_type) {
                 case HeadTorsoConnection:
                     recieveTorsoInvitation.HandleMessage(msg);
@@ -55,10 +54,10 @@ private:
         while (true) {
             recieveTorsoInvitation.acquire();
             std::cout << "Head " << node_id << " accepted team invite.\n";
-            //workbenches.acquire();
+            workbenches.acquire();
 
             recieveTorsoInvitation.release();
-            //workbenches.release();
+            workbenches.release();
 
         }
     }
@@ -95,7 +94,7 @@ private:
     Communicator communicator;
     SendInvitationStrategy sendInvitationToHead;
     RecieveInvitationStrategy recieveInvitationFromTail;
-    RenewableResourceStrategy tasks;
+    ConsumableResourceStrategy tasks;
 private:
     [[noreturn]] void communication_thread() {
         while (true) {
@@ -106,6 +105,9 @@ private:
                     break;
                 case TorsoTailConnection:
                     recieveInvitationFromTail.HandleMessage(msg);
+                    break;
+                case Task:
+                    tasks.HandleMessage(msg);
                     break;
             }
         }
@@ -118,11 +120,11 @@ private:
             recieveInvitationFromTail.acquire();
             std::cout << "Torso " << node_id << " teamed with a Tail.\n";
 
-            //tasks.acquire();
+            tasks.acquire();
 
             recieveInvitationFromTail.release();
 
-            //tasks.release();
+            tasks.release();
 
             sendInvitationToHead.release();
         }
@@ -132,9 +134,9 @@ public:
     void run() {
         std::thread th(&Torso::communication_thread, this);
         std::thread th2;
-        //if(node_id == TORSO){ /*One torso recieves an additional job of broadcasting new tasks*/
-        //    th2 = std::thread(&ConsumableResourceStrategy::produceResourceThread, &tasks);
-        //}
+        if(node_id == TORSO){ /*One torso recieves an additional job of broadcasting new tasks*/
+            th2 = std::thread(&ConsumableResourceStrategy::produceResourceThread, &tasks);
+        }
         processing_thread();
         th.join();
         th2.join();
@@ -156,7 +158,7 @@ public:
                     node_id,
                     &communicator,
                     taskCount,
-                    torsoes, "Task(" + std::to_string(Task) + ")", "Torso") {}
+                    torsoes, "Torso", "Task(" + std::to_string(Task) + ")") {}
 };
 
 class Tail {
@@ -184,7 +186,7 @@ private:
     [[noreturn]] void processing_thread() {
         while (true) {
             sendInvitationToTorso.acquire();
-            std::cout << "Tail " << node_id << " found a Torso.\n";
+            //std::cout << "Tail " << node_id << " found a Torso.\n";
             dragonCarcass.acquire();
 
             //Wskrzeszanie

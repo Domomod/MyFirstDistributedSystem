@@ -13,7 +13,8 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
-void inviting(int tid, int size)
+
+[[noreturn]] void inviting(int tid, int size)
 {
 	std::vector<int> accepting_nodes;
 	std::shuffle(accepting_nodes.begin(), accepting_nodes.end(), std::random_device());
@@ -33,7 +34,7 @@ void inviting(int tid, int size)
 	}
 }
 
-void accepting(int tid, int size)
+[[noreturn]] void accepting(int tid, int size)
 {
     Communicator communicator(tid);
 	RecieveInvitationStrategy strategy(0, tid, &communicator, std::__cxx11::string(), std::__cxx11::string());

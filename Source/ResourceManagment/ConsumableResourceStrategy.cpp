@@ -138,14 +138,13 @@ void ConsumableResourceStrategy::SendAgreement(Message &message) {
                 msg.destination = node;
                 communicator->Send(msg);
             }
-            msg.destination = node_id;
-            communicator->Send(msg);
-//            resource_count += msg.signature;
-//            if (permits == other_nodes.size() && resource_count > 0) {
-//                state = ACQUIRED;
-//                std::cout << "[Node " << node_id << "] changed state to ACQUIRED\n";
-//                state_cv.notify_all();
-//            }
+
+            resource_count += msg.signature;
+            if (permits == other_nodes.size() && resource_count > 0) {
+                state = ACQUIRED;
+                std::cout << "[Node " << node_id << "] changed state to ACQUIRED\n";
+                state_cv.notify_all();
+            }
         }
         sleep(4);
     }
