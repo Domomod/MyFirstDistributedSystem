@@ -1,5 +1,6 @@
 #include <mpi.h>
 #include <mutex>
+#include <vector>
 #include "Comunicator.h"
 
 std::ostream& operator<<(std::ostream& os, const Message& msg)
@@ -8,6 +9,20 @@ std::ostream& operator<<(std::ostream& os, const Message& msg)
     return os;
 }
 
+
+void Communicator::Broadcast(Message message, std::vector<int> destination_list){
+    std::lock_guard<std::mutex> lock(clock_mtx);
+    message.lamport_clock = lamportClock;
+    lamportClock = lamportClock + 1;
+
+
+    for(auto destination : destination_list){
+        _Message smaller_msg(message);
+        MPI_Send(&smaller_msg, 4, MPI_INT, destination, MSG_TAG, MPI_COMM_WORLD);
+        message.destination = destination; // For proper log printing
+        std::cout << "["<< nodeType <<" " << message.sender << "] sending: "<< message << "\n";
+    }
+}
 
 void Communicator::Send(Message message)
 {

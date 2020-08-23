@@ -2,6 +2,7 @@
 #include <mutex>
 #include <mpi.h>
 #include <sstream>
+#include <vector>
 
 #ifndef COMUNICATOR_H
 #define COMUNICATOR_H
@@ -49,6 +50,8 @@ public:
     Message Recieve();
 
     int getLamportClock();
+
+    void Broadcast(Message message, std::vector<int> destination_list);
 };
 
 struct Message {

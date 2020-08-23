@@ -28,10 +28,7 @@ void RenewableResourceStrategy::acquire() {
     request_priority = communicator->getLamportClock();
     request_number++;
     Message msg(Request, node_id, 0, request_number, resource_type, request_priority);
-    for (auto node : other_nodes) {
-        msg.destination = node;
-        communicator->Send(msg);
-    }
+    communicator->Broadcast(msg, other_nodes);
     state_cv.wait(lock, [=]() { return state == ACQUIRED; });
     WriteLog("Acquired the resource");
 }
@@ -40,6 +37,7 @@ void RenewableResourceStrategy::release() {
     WriteLog("Tries to release the resouce");
     std::lock_guard<std::mutex> lock(state_mtx);
     changeState(IDLE);
+
     for (auto &request : requests) {
         SendAgreement(request);
     }

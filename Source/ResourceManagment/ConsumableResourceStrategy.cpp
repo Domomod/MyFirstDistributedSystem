@@ -27,10 +27,7 @@ void ConsumableResourceStrategy::acquire() {
     permits = 0;
     request_priority = communicator->getLamportClock();
     Message msg(Request, node_id, 0, 0, resource_type, request_priority);
-    for (auto node : other_nodes) {
-        msg.destination = node;
-        communicator->Send(msg);
-    }
+    communicator->Broadcast(msg, other_nodes);
     state_cv.wait(lock, [=]() { return state == ACQUIRED; });
     WriteLog("Acquired the resource");
 }
@@ -75,7 +72,6 @@ void ConsumableResourceStrategy::HandleWhileIdle(Message &message) {
         SendAgreement(message);
     } else if (message.type == Increment) {
         resource_count += message.signature;
-        CheckIfAcquired();
     }
 }
 
@@ -83,6 +79,7 @@ void ConsumableResourceStrategy::HandleWhileCompeting(Message &message) {
     if (message.type == Request) {
         if (message.lamport_clock > request_priority ||
             (message.lamport_clock == request_priority && message.sender > node_id)) {
+            std::cout << message.lamport_clock <<">"<< request_priority <<"||"<<message.lamport_clock <<"=="<< request_priority <<"&&"<< message.sender <<">"<< node_id<<"\n";
             SaveMessageForLater(message);
         } else {
             SendAgreement(message);
@@ -103,7 +100,6 @@ void ConsumableResourceStrategy::HandleWhileAcquired(Message &message) {
         SaveMessageForLater(message);
     } else if (message.type == Increment) {
         resource_count += message.signature;
-        CheckIfAcquired();
     }
 }
 
@@ -140,7 +136,7 @@ void ConsumableResourceStrategy::SendAgreement(Message &message) {
             }
 
             resource_count += msg.signature;
-            if (permits == other_nodes.size() && resource_count > 0) {
+            if (state == COMPETING && permits == other_nodes.size() && resource_count > 0) {
                 state = ACQUIRED;
                 std::cout << "[Node " << node_id << "] changed state to ACQUIRED\n";
                 state_cv.notify_all();
